@@ -4,8 +4,12 @@
   import { route, sessionIdFromPath } from "./lib/router.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import CommandPalette from "./components/CommandPalette.svelte";
+  import FilterBar from "./components/FilterBar.svelte";
+  import SessionTable from "./components/SessionTable.svelte";
+  import { filterRows } from "./lib/filter";
 
   const sessionId = $derived(sessionIdFromPath(route.current.path));
+  const filtered = $derived(filterRows(app.rows, app.filters));
 
   $effect(() => {
     if (app.theme === "auto") document.documentElement.removeAttribute("data-theme");
@@ -35,7 +39,8 @@
     {:else if sessionId}
       <div class="empty mono">{sessionId}</div>
     {:else}
-      <div class="empty">{app.rows.length} sessions</div>
+      <FilterBar shown={filtered.length} total={app.rows.length} />
+      <SessionTable rows={filtered} />
     {/if}
   </main>
 </div>

@@ -15,8 +15,12 @@ function parse(): Route {
 
 export const route = $state<{ current: Route }>({ current: parse() });
 
-window.addEventListener("hashchange", () => (route.current = parse()));
-window.addEventListener("popstate", () => (route.current = parse()));
+window.addEventListener("hashchange", () => {
+  route.current = parse();
+});
+window.addEventListener("popstate", () => {
+  route.current = parse();
+});
 
 function build(path: string[], query: URLSearchParams): string {
   const q = query.toString();

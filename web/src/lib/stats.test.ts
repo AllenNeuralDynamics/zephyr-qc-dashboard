@@ -38,6 +38,9 @@ describe("measure catalogue", () => {
       "expected_precision",
     ]));
   it("judges eight of them", () => expect(JUDGED.length).toBe(8));
+  it("has a short column label for each", () => {
+    for (const m of MEASURES) expect(m.short.length).toBeGreaterThan(0), expect(m.short.length).toBeLessThanOrEqual(12);
+  });
   it("copies Zephyr's directions", () => {
     const by = Object.fromEntries(MEASURES.map((m) => [m.name, m.better]));
     expect(by.too_fast_frac).toBe("lower");

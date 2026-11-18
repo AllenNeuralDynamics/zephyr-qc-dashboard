@@ -434,3 +434,31 @@ table.dense tr.selected td {
   --jse-panel-background: var(--surface-2);
   --jse-text-color: var(--text);
 }
+
+/* ---- Zephyr QC chart tokens (dataviz reference palette; validated light + dark) ---- */
+:root {
+  --series-good: #2a78d6; /* categorical slot 1: reference windows predicted well */
+  --series-poor: #eb6834; /* categorical slot 2: reference windows predicted poorly */
+  --series-session: var(--text); /* this session: neutral ink */
+  --atyp: #eb6834; /* single-hue tint for percentile cells, mixed into the surface */
+  --trace: #2a78d6;
+  --onset: #6250d6;
+  --grid: var(--border);
+  --axis: var(--text-3);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --series-good: #3987e5;
+    --series-poor: #d95926;
+    --atyp: #d95926;
+    --trace: #3987e5;
+    --onset: #9085e9;
+  }
+}
+:root[data-theme="dark"] {
+  --series-good: #3987e5;
+  --series-poor: #d95926;
+  --atyp: #d95926;
+  --trace: #3987e5;
+  --onset: #9085e9;
+}
