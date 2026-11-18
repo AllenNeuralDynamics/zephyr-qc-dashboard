@@ -4,7 +4,6 @@
   import { fileUrl, type IndexRow } from "../lib/index-types";
   import { href } from "../lib/router.svelte";
   import { bucketUrl, listPrefix, s3Location } from "../lib/s3";
-  import { NETWORKS_PREFIX } from "../lib/networks";
 
   let { row }: { row: IndexRow } = $props();
   let zoom = $state(false);
@@ -42,13 +41,15 @@
       cli: `aws s3 cp --recursive --no-sign-request ${uri} .`,
     };
   });
-  // the Zephyr inference asset in the AIND catalog browser. The manuscript's application/ folders
-  // are scratch, not catalog assets: they have no link (copy the path instead)
+  // the folder with the inferred data in the AIND catalog browser; it browses any public bucket
+  // (aind-open-data by default, others with ?bucket=)
   const CATALOG = "https://allenneuraldynamics.github.io/catalog-browser/browse/";
   const catalog = $derived.by(() => {
-    if (row.b.includes(`/${NETWORKS_PREFIX}`)) return null;
-    const name = row.id.split("/")[0];
-    return name ? { url: `${CATALOG}${encodeURIComponent(name)}/`, title: name } : null;
+    const loc = s3Location(row.b);
+    if (!loc) return null;
+    const path = loc.prefix.split("/").filter(Boolean).map(encodeURIComponent).join("/");
+    const bucket = loc.bucket === "aind-open-data" ? "" : `?bucket=${encodeURIComponent(loc.bucket)}`;
+    return { url: `${CATALOG}${path}/${bucket}`, title: `s3://${loc.bucket}/${loc.prefix}` };
   });
   let copied = $state<string | null>(null);
   function copy(text: string) {
