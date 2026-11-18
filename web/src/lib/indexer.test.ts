@@ -87,7 +87,7 @@ describe("buildIndex", () => {
       v: 1,
       generated: "x",
       source: "test",
-      networks: {},
+      networks: { [SHA]: { label: "all-cameras/cv_0/seed-17", ref: "https://ref/a" } },
       sessions: [
         { id: "a", b: "https://b/a/", st: "video", raw: null, s: "1", r: null, e: [], t: null, c: null, n: SHA, d: 1, w: 5, m: {}, png: false },
         { id: "bb", b: "https://b/bb/", st: "video", raw: null, s: "1", r: null, e: [], t: null, c: null, n: null, d: null, w: 0, m: {}, png: false, err: "boom" },
@@ -104,6 +104,27 @@ describe("buildIndex", () => {
     const full = deps();
     await buildIndex([session("a"), session("bb")], prev, full.d, { ...opts, full: true });
     expect(full.calls.qc.length).toBe(2);
+  });
+
+  it("marks rows for retry when their network's reference fails to load", async () => {
+    const { d } = deps({ loadRef: async () => { throw new Error("503 https://ref/a"); } });
+    const [row] = (await buildIndex([session("a")], null, d, opts)).sessions;
+    expect(row.err).toContain("reference");
+    expect(typeof row.m.head_trace_f1?.[0]).toBe("number"); // values still shown
+    const retry = deps();
+    await buildIndex([session("a")], { v: 1, generated: "x", source: "t", networks: {}, sessions: [row] }, retry.d, opts);
+    expect(retry.calls.qc.length).toBe(1);
+  });
+
+  it("re-indexes a reused row when its network gained a reference since", async () => {
+    const prev: Index = {
+      v: 1, generated: "x", source: "t", networks: {},
+      sessions: [{ id: "a", b: "https://b/a/", st: "video", raw: null, s: "1", r: null, e: [], t: null, c: null, n: SHA, d: 1, w: 5, m: {}, png: false }],
+    };
+    const { d, calls } = deps();
+    const [row] = (await buildIndex([session("a")], prev, d, opts)).sessions;
+    expect(calls.qc.length).toBe(1);
+    expect(typeof row.m.head_trace_f1?.[1]).toBe("number");
   });
 
   it("prefers the metadata's checkpoint hash over the report's", async () => {

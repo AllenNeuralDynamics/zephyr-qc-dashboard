@@ -59,6 +59,29 @@ describe("metadataSource", () => {
     ]);
     expect(refs[0]).toMatchObject({
       id: "788731_2025-12-09_19-10-07_processed_2025-12-20_19-45-53/FaceCamera_a",
+    });
+  });
+
+  it("keeps going when an asset cannot be listed", async () => {
+    const f = fakeFetch((url) => {
+      if (url.startsWith("https://api.allenneuraldynamics.org")) return JSON.stringify([records[0]]);
+      if (url.includes("list-type=2")) return { status: 403, body: "AccessDenied" };
+      throw new Error(url);
+    });
+    const refs = await metadataSource.list(f);
+    expect(refs.map((r) => [r.stem, r.failed])).toEqual([
+      ["FaceCamera_a", false],
+      ["unknown-1", true],
+    ]);
+  });
+
+  it("builds base URLs and ids", async () => {
+    const f = fakeFetch((url) =>
+      url.startsWith("https://api.allenneuraldynamics.org") ? JSON.stringify([records[0]]) : "<ListBucketResult></ListBucketResult>",
+    );
+    const refs = await metadataSource.list(f);
+    expect(refs[0]).toMatchObject({
+      id: "788731_2025-12-09_19-10-07_processed_2025-12-20_19-45-53/FaceCamera_a",
       base: "https://aind-open-data.s3.us-west-2.amazonaws.com/788731_2025-12-09_19-10-07_processed_2025-12-20_19-45-53/",
       camera: "Face",
       sha: "4e03b281768e0f0f42adde829e0d74db803547831e48bb73f62be2016c9e256c",

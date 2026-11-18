@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fetchJson, fetchRange, httpsUrl, listPrefix } from "./s3";
+import { fetchJson, fetchRange, httpsUrl, listPrefix, s3Location } from "./s3";
 import { fakeFetch } from "./fixtures/fake-fetch";
 
 describe("httpsUrl", () => {
@@ -29,6 +29,12 @@ describe("listPrefix", () => {
     expect(out.prefixes).toEqual(["p/sub1/", "p/sub2/"]);
     expect(f.calls[0]).toContain("https://bkt.s3.us-west-2.amazonaws.com/?list-type=2&prefix=p%2F&delimiter=%2F");
   });
+});
+
+describe("s3Location", () => {
+  it("splits a public folder URL into bucket and prefix", () =>
+    expect(s3Location("https://aind-open-data.s3.us-west-2.amazonaws.com/a_b/c/")).toEqual({ bucket: "aind-open-data", prefix: "a_b/c/" }));
+  it("is null for other URLs", () => expect(s3Location("https://example.org/x/")).toBeNull());
 });
 
 describe("fetchRange / fetchJson", () => {

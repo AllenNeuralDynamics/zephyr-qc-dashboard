@@ -30,6 +30,16 @@ describe("sortRows", () => {
     expect(ids(sortRows(rows, "peak_prob", "pct", "asc"))).toEqual(["1", "2", "3", "4"]));
   it("puts missing values last descending", () =>
     expect(ids(sortRows(rows, "peak_prob", "pct", "desc"))).toEqual(["2", "1", "3", "4"]));
+  it("orders sessions without a percentile by value, after those with one", () => {
+    const noRef = [
+      row("a", { m: { peak_prob: [0.7, null] } }),
+      row("b", { m: { peak_prob: [0.5, 20] } }),
+      row("c", { m: { peak_prob: [0.9, null] } }),
+      row("d", { m: {} }),
+    ];
+    expect(ids(sortRows(noRef, "peak_prob", "pct", "asc"))).toEqual(["b", "a", "c", "d"]);
+    expect(ids(sortRows(noRef, "peak_prob", "pct", "desc"))).toEqual(["b", "c", "a", "d"]);
+  });
   it("sorts by date", () => expect(ids(sortRows(rows, "date", "value", "desc"))).toEqual(["3", "2", "1", "4"]));
   it("does not mutate its input", () => {
     const copy = [...rows];

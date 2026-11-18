@@ -18,7 +18,12 @@ const STEM_FILES = /([^/]+?)(\.qc\.json|\.prediction\.parquet|\.clip\.toml)$/;
 async function stemsInAsset(location: string, f: Fetch): Promise<string[]> {
   const m = /^s3:\/\/([^/]+)\/(.+?)\/?$/.exec(location);
   if (!m) return [];
-  const { keys } = await listPrefix(m[1], `${m[2]}/`, {}, f);
+  let keys: { key: string }[];
+  try {
+    ({ keys } = await listPrefix(m[1], `${m[2]}/`, {}, f));
+  } catch {
+    return []; // unlistable asset (private, moved): its unnamed videos become unknown-<i> rows
+  }
   const stems = keys.map((k) => STEM_FILES.exec(k.key)?.[1]).filter((s): s is string => !!s);
   return [...new Set(stems)];
 }

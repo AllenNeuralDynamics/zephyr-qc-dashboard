@@ -13,6 +13,12 @@ export function httpsUrl(uri: string): string {
   return m ? `${bucketUrl(m[1])}/${m[2]}` : uri;
 }
 
+/** Public https URL of an object or folder → bucket and key prefix (for listing); null otherwise. */
+export function s3Location(url: string): { bucket: string; prefix: string } | null {
+  const m = /^https:\/\/([^.]+)\.s3\.[\w-]+\.amazonaws\.com\/(.*)$/.exec(url);
+  return m ? { bucket: m[1], prefix: decodeURIComponent(m[2]) } : null;
+}
+
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
 const unxml = (s: string): string =>
   s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (all, e: string) =>

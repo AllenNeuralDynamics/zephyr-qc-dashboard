@@ -40,23 +40,31 @@ export async function buildIndex(
 ): Promise<Index> {
   const old = new Map((prev?.sessions ?? []).map((r) => [r.id, r]));
   const references = new Map<string, Promise<Reference | null>>();
+  /** null: the network has no reference; rejects: it has one but it could not be loaded. */
   const reference = (sha: string | null): Promise<Reference | null> => {
     const net = sha ? deps.networks[sha] : undefined;
     if (!net) return Promise.resolve(null);
-    if (!references.has(net.referenceUrl)) {
-      references.set(net.referenceUrl, deps.loadRef(net.referenceUrl).catch(() => null));
-    }
+    if (!references.has(net.referenceUrl)) references.set(net.referenceUrl, deps.loadRef(net.referenceUrl));
     return references.get(net.referenceUrl)!;
   };
+  // a reused row is stale if its network has a reference now that the previous index lacked
+  const gainedReference = (r: IndexRow) => !!r.n && !!deps.networks[r.n] && !prev?.networks[r.n];
 
   const rows = await mapLimit(refs, 8, async (s): Promise<IndexRow> => {
     const before = old.get(s.id);
-    if (before && !before.err && !opts.full) return before;
+    if (before && !before.err && !opts.full && !gainedReference(before)) return before;
     const row = baseRow(s);
     try {
       const qc = await deps.loadQc(fileUrl(row, ".qc.json"));
       row.n = s.sha ?? qc.checkpoint_sha256 ?? null;
-      const stats = windowStats(qc, await reference(row.n));
+      let ref: Reference | null = null;
+      try {
+        ref = await reference(row.n);
+      } catch (e) {
+        // keep the values, flag the row so the next run retries it
+        row.err = `reference could not be loaded: ${message(e)}`;
+      }
+      const stats = windowStats(qc, ref);
       row.d = Number.isFinite(qc.duration_s) ? qc.duration_s : null;
       row.w = qc.windows.length;
       row.m = Object.fromEntries(MEASURE_NAMES.map((m) => [m, [stats[m].median, stats[m].medianPct]]));

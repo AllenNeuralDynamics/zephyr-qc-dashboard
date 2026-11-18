@@ -3,7 +3,7 @@
   // precision of asserted inhales on validation clips, dot area by number of inhales.
   import * as Plot from "@observablehq/plot";
   import { app } from "../lib/app.svelte";
-  import { formatValue } from "../lib/format";
+  import { formatCount, formatValue } from "../lib/format";
   import type { Calibration } from "../lib/qc";
 
   let { cal, version }: { cal: Calibration; version: string } = $props();
@@ -54,7 +54,7 @@
     <dl>
       <div><dt>precision on validation</dt><dd class="mono">{formatValue(cal.precision)}</dd></div>
       <div><dt>calibration error (ECE)</dt><dd class="mono">{formatValue(cal.ece_raw)} → {formatValue(cal.ece)}</dd></div>
-      <div><dt>inhales used</dt><dd class="mono">{cal.events.toLocaleString()}</dd></div>
+      <div><dt>inhales used</dt><dd class="mono">{formatCount(cal.events)}</dd></div>
       <div><dt>Zephyr version</dt><dd class="mono small">{version || "—"}</dd></div>
     </dl>
   </div>

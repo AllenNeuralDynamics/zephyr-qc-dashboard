@@ -35,3 +35,8 @@ export function formatDuration(s: number | null | undefined): string {
   const sec = String(total % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
 }
+
+/** An integer count with thousands separators. */
+export function formatCount(n: number | null | undefined): string {
+  return isMissing(n) ? DASH : Math.round(n).toLocaleString("en-US");
+}

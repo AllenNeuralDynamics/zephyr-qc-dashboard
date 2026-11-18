@@ -31,20 +31,27 @@ export function filterRows(rows: IndexRow[], f: Filters): IndexRow[] {
 
 export type SortKey = "date" | MeasureName;
 
-/** Sorted copy; sessions without the value go last in both directions. */
+/**
+ * Sorted copy; sessions without the value go last in both directions. Sorting by percentile puts
+ * sessions that have none (no reference for their network) after those that do, ordered by value.
+ */
 export function sortRows(rows: IndexRow[], key: SortKey, by: "value" | "pct", dir: "asc" | "desc"): IndexRow[] {
-  const get = (r: IndexRow): number | string | null => {
-    if (key === "date") return r.t;
-    const v = r.m[key]?.[by === "value" ? 0 : 1];
-    return v === undefined || v === null || !Number.isFinite(v) ? null : v;
+  const num = (v: number | null | undefined): number | null => (v === undefined || v === null || !Number.isFinite(v) ? null : v);
+  const keyOf = (r: IndexRow): [number, number | string | null] => {
+    if (key === "date") return [0, r.t];
+    const [value, pct] = r.m[key] ?? [null, null];
+    if (by === "value") return [0, num(value)];
+    return num(pct) !== null ? [0, num(pct)] : [1, num(value)];
   };
   const sign = dir === "asc" ? 1 : -1;
   return rows
-    .map((r) => ({ r, v: get(r) }))
+    .map((r) => ({ r, k: keyOf(r) }))
     .sort((a, b) => {
-      if (a.v === null) return b.v === null ? 0 : 1;
-      if (b.v === null) return -1;
-      return sign * (a.v < b.v ? -1 : a.v > b.v ? 1 : 0);
+      const [ga, va] = a.k;
+      const [gb, vb] = b.k;
+      if (va === null || vb === null) return va === null ? (vb === null ? ga - gb : 1) : -1;
+      if (ga !== gb) return ga - gb;
+      return sign * (va < vb ? -1 : va > vb ? 1 : 0);
     })
     .map((x) => x.r);
 }

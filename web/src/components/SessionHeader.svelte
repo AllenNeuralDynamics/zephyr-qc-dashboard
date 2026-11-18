@@ -3,11 +3,35 @@
   import { DASH, formatDate, formatDuration } from "../lib/format";
   import { fileUrl, type IndexRow } from "../lib/index-types";
   import { href } from "../lib/router.svelte";
+  import { bucketUrl, listPrefix, s3Location } from "../lib/s3";
 
   let { row }: { row: IndexRow } = $props();
   let zoom = $state(false);
   const network = $derived(app.networkLabel(row.n));
   const time = $derived(row.t ? row.t.slice(11, 16) + " UTC" : "");
+
+  // S3 folder URLs are not browsable: list the asset and link the files that exist
+  let files = $state<{ name: string; url: string; size: number }[] | null>(null);
+  let filesError = $state<string | null>(null);
+  $effect(() => {
+    const loc = s3Location(row.b);
+    files = null;
+    filesError = null;
+    if (!loc) return;
+    let alive = true;
+    listPrefix(loc.bucket, loc.prefix)
+      .then(({ keys }) => {
+        if (!alive) return;
+        files = keys
+          .map((k) => ({ name: k.key.slice(loc.prefix.length), url: `${bucketUrl(loc.bucket)}/${k.key}`, size: k.size }))
+          .filter((x) => x.name && !x.name.includes("/"));
+      })
+      .catch((e: Error) => alive && (filesError = e.message));
+    return () => {
+      alive = false;
+    };
+  });
+  const kb = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 </script>
 
 <header class="head">
@@ -28,8 +52,23 @@
         {#if network}{network}{:else}<span class="badge warn" title={row.n ?? ""}>no reference for this network</span>{/if}
       </dd>
     </div>
-    <div><dt>Files</dt><dd><a href={row.b} target="_blank" rel="noreferrer">asset folder ↗</a></dd></div>
   </dl>
+  <details class="files">
+    <summary class="faint">Files in this asset{files ? ` (${files.length})` : ""}</summary>
+    {#if filesError}
+      <span class="faint">Could not list the asset: {filesError}</span>
+    {:else if !files}
+      <span class="faint">Listing…</span>
+    {:else}
+      <ul>
+        {#each files as f (f.url)}
+          <li><a class="mono" href={f.url} target="_blank" rel="noreferrer" download>{f.name}</a> <span class="faint">{kb(f.size)}</span></li>
+        {:else}
+          <li class="faint">No files found.</li>
+        {/each}
+      </ul>
+    {/if}
+  </details>
   {#if row.err}
     <div class="notice error">Could not read this session: {row.err}</div>
   {/if}
@@ -84,6 +123,18 @@
   }
   .notice {
     grid-column: 1;
+  }
+  .files {
+    grid-column: 1;
+    font-size: 12px;
+  }
+  .files summary {
+    cursor: pointer;
+  }
+  .files ul {
+    margin: 4px 0 0;
+    padding-left: 16px;
+    columns: 2 320px;
   }
   .thumb {
     grid-column: 2;

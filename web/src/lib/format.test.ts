@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatPct, formatValue } from "./format";
+import { formatCount, formatDate, formatPct, formatValue } from "./format";
 
 describe("formatPct", () => {
   it("shows a dash for a missing percentile", () => expect(formatPct(null)).toBe("—"));
@@ -10,6 +10,11 @@ describe("formatValue", () => {
   it("shows a dash for NaN", () => expect(formatValue(NaN)).toBe("—"));
   it("shows a dash for null", () => expect(formatValue(null)).toBe("—"));
   it("keeps three significant digits", () => expect(formatValue(0.92896)).toBe("0.929"));
+});
+
+describe("formatCount", () => {
+  it("groups thousands", () => expect(formatCount(257350)).toBe("257,350"));
+  it("shows a dash for a missing count", () => expect(formatCount(undefined)).toBe("—"));
 });
 
 describe("formatDate", () => {
