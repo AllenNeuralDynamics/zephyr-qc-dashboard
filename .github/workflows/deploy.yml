@@ -1,0 +1,67 @@
+name: Index and deploy
+
+# Rebuild the session index from the AIND metadata service (and the manuscript's application/
+# samples) and publish the dashboard to GitHub Pages. Incremental by default: sessions already in
+# the published index.json are reused; run manually with "full" to re-read every session.
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 9 * * *" # daily, 09:00 UTC
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Re-index every session (ignore the published index)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+
+      - name: Build the session index
+        env:
+          PREV: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/index.json
+          FULL: ${{ inputs.full && '--full' || '' }}
+        run: npm run index -- --source both --out public/index.json --prev "$PREV" $FULL
+
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
