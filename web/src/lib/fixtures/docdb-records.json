@@ -1,0 +1,44 @@
+[
+  {
+    "name": "788731_2025-12-09_19-10-07_processed_2025-12-20_19-45-53",
+    "location": "s3://aind-open-data/788731_2025-12-09_19-10-07_processed_2025-12-20_19-45-53",
+    "subject": { "subject_id": "788731" },
+    "data_description": { "source_data": ["788731_2025-12-09_19-10-07"] },
+    "instrument": { "instrument_id": "13A" },
+    "acquisition": {
+      "subject_id": "788731",
+      "acquisition_start_time": "2025-12-09 19:10:07.997150+00:00",
+      "experimenters": ["jason.lee"],
+      "instrument_id": "13A"
+    },
+    "processing": {
+      "data_processes": [
+        { "name": "Some other step", "code": { "parameters": {} } },
+        {
+          "name": "Zephyr breathing prediction",
+          "code": { "parameters": { "camera": "Face", "checkpoint_sha256": "4e03b281768e0f0f42adde829e0d74db803547831e48bb73f62be2016c9e256c" } },
+          "output_parameters": { "qc_json": "FaceCamera_a.qc.json", "prediction_parquet": "FaceCamera_a.prediction.parquet" },
+          "notes": "Zephyr breathing prediction from behavior video: scale, crop to the box, run the network, write the breathing trace, inhale probability and inhale onsets."
+        },
+        {
+          "name": "Zephyr breathing prediction",
+          "code": { "parameters": { "camera": "Face", "checkpoint_sha256": "4e03b281768e0f0f42adde829e0d74db803547831e48bb73f62be2016c9e256c" } },
+          "output_parameters": { "clip_toml": "FaceCamera_b.clip.toml" },
+          "notes": "Zephyr breathing prediction from behavior video: scale, crop to the box, run the network, write the breathing trace, inhale probability and inhale onsets. PREDICTION FAILED; see the run log."
+        }
+      ]
+    }
+  },
+  {
+    "name": "804430_2025-11-10_23-35-39_processed_2026-02-17_00-40-18",
+    "location": "s3://aind-open-data/804430_2025-11-10_23-35-39_processed_2026-02-17_00-40-18",
+    "acquisition": { "subject_id": "804430", "acquisition_start_time": "2025-11-10T23:35:39.360000Z" },
+    "instrument": { "instrument_id": "13B" }
+  },
+  {
+    "name": "804430_2025-11-10_23-35-39",
+    "location": "s3://aind-open-data/804430_2025-11-10_23-35-39",
+    "subject": { "subject_id": "804430" },
+    "acquisition": { "acquisition_start_time": "2025-11-10T23:35:39.360000Z", "experimenters": ["jason.lee"], "instrument_id": "13A" }
+  }
+]
