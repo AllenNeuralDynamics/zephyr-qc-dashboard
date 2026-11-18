@@ -13,7 +13,7 @@
   import type { QcWindow, Values } from "../lib/qc";
   import type { Prediction } from "../lib/session";
   import { atypicality, shadeMix } from "../lib/shade";
-  import { breathingRate } from "../lib/rate";
+  import { autoRateWindow, breathingRate } from "../lib/rate";
   import { extentTicks } from "../lib/ticks";
 
   let {
@@ -23,7 +23,7 @@
     measure,
     threshold,
     sniff = null,
-    rateWindow = 0,
+    rateWindow = null,
   }: {
     pred: Prediction;
     windows: QcWindow[];
@@ -32,11 +32,13 @@
     threshold: number;
     /** sniff sensor on the prediction's samples (null: none or not loaded yet) */
     sniff?: Float32Array | null;
-    /** breathing-rate rolling window, s (0 = instantaneous) */
-    rateWindow?: number;
+    /** breathing-rate rolling window, s (0 = instantaneous, null = follow the zoom) */
+    rateWindow?: number | null;
   } = $props();
 
   let host = $state<HTMLDivElement | null>(null);
+  // one element per chart, each under its own caption
+  const hosts = $state<Record<"sig" | "sniff" | "rate" | "ons" | "strip", HTMLDivElement | null>>({ sig: null, sniff: null, rate: null, ons: null, strip: null });
   let width = $state(800);
   let charts: uPlot[] = [];
   let range: [number, number] = [0, 1];
@@ -48,7 +50,8 @@
   const inhales = $derived(Float64Array.from(pred.inhaleTimes, (t) => t - t0));
   const wins = $derived(windows.map((w, i) => ({ start: w.start - t0, end: w.end - t0, value: w[measure] ?? null, pct: pcts[i]?.[measure] ?? null })));
   const full = $derived<[number, number]>([0, rel.length ? rel[rel.length - 1] : 1]);
-  const rate = $derived(breathingRate(inhales, rateWindow));
+  /** the rate window in use (the set one, or the one the zoom picked) */
+  let effWindow = $state(0);
 
   // resolve a CSS custom property to a concrete color (canvas cannot use `var(--x)` strings)
   function css(name: string): string {
@@ -104,7 +107,7 @@
     });
 
   function build() {
-    if (!host) return;
+    if (!host || !hosts.sig || !hosts.rate || !hosts.ons || !hosts.strip) return;
     for (const u of charts) u.destroy();
     // keep the zoom across rebuilds (reference arriving, measure or theme change); reset for new data
     if (builtFor !== pred) range = [...full];
@@ -157,12 +160,12 @@
         },
       },
       data(pred.signal),
-      host,
+      hosts.sig!,
     );
     const made: uPlot[] = [sig];
     refreshers = [() => sig.setData(data(pred.signal), false)];
 
-    if (sniff) {
+    if (sniff && hosts.sniff) {
       const values = sniff;
       const sn = new uPlot(
         {
@@ -171,36 +174,48 @@
           series: [{}, { stroke: css("--sniff"), width: 1, points: { show: false } }],
         },
         data(values),
-        host,
+        hosts.sniff,
       );
       made.push(sn);
       refreshers.push(() => sn.setData(data(values), false));
     }
 
-    // breathing rate from the inter-onset intervals: steps (window 0) or a rolling mean
-    const top = (() => {
-      const v = Array.from(rate.hz).filter(Number.isFinite).sort((a, b) => a - b);
-      return v.length ? v[Math.min(v.length - 1, Math.floor(v.length * 0.995))] * 1.15 : 1;
-    })();
+    // breathing rate from the inter-onset intervals: steps (window 0) or a rolling mean; the window
+    // follows the zoom unless one is set, so it is recomputed (only when it changes) on every zoom
+    const stepped = uPlot.paths.stepped!({ align: 1 });
+    const linear = uPlot.paths.linear!();
+    let computedFor = -1;
+    let rateData: uPlot.AlignedData = [[], []];
+    let top = 1;
+    const rateFor = (): uPlot.AlignedData => {
+      const w = rateWindow ?? autoRateWindow(range[1] - range[0]);
+      if (w !== computedFor) {
+        const r = breathingRate(inhales, w);
+        const v = Array.from(r.hz).filter(Number.isFinite).sort((a, b) => a - b);
+        top = v.length ? v[Math.min(v.length - 1, Math.floor(v.length * 0.995))] * 1.15 : 1;
+        rateData = [Array.from(r.t), Array.from(r.hz, gap)] as uPlot.AlignedData;
+        computedFor = w;
+        effWindow = w;
+      }
+      return rateData;
+    };
+    const first = rateFor();
     const rt = new uPlot(
       {
         ...common(100),
         axes: [timeAxis(false), axis("rate (Hz)", { values: (_u, t) => t.map((v) => formatValue(v, 2)) })],
-        scales: { ...common(0).scales, y: { auto: false, range: [0, top] } },
-        series: [
-          {},
-          {
-            stroke: css("--rate"),
-            width: 1.25,
-            points: { show: false },
-            paths: rateWindow > 0 ? undefined : uPlot.paths.stepped!({ align: 1 }),
-          },
-        ],
+        scales: { ...common(0).scales, y: { auto: false, range: () => [0, top] } },
+        series: [{}, { stroke: css("--rate"), width: 1.25, points: { show: false }, paths: effWindow > 0 ? linear : stepped }],
       },
-      [Array.from(rate.t), Array.from(rate.hz, gap)] as uPlot.AlignedData,
-      host,
+      first,
+      hosts.rate!,
     );
     made.push(rt);
+    refreshers.push(() => {
+      const d = rateFor();
+      rt.series[1].paths = computedFor > 0 ? linear : stepped;
+      rt.setData(d, false);
+    });
 
     const ons = new uPlot(
       {
@@ -231,7 +246,7 @@
         },
       },
       data(pred.onset),
-      host,
+      hosts.ons!,
     );
     made.push(ons);
     refreshers.push(() => ons.setData(data(pred.onset), false));
@@ -307,7 +322,7 @@
         },
       },
       [wins.map((w) => (w.start + w.end) / 2), wins.map((w) => w.value)] as uPlot.AlignedData,
-      host,
+      hosts.strip!,
     );
     strip.over.addEventListener("click", () => {
       if (hovered !== null && strip.select.width < 3) setRange([wins[hovered].start, wins[hovered].end]);
@@ -334,31 +349,49 @@
 
   // rebuild when the data, the measure, the threshold or the theme change
   $effect(() => {
-    void [pred, wins, threshold, app.theme, sniff, rate];
+    void [pred, wins, threshold, app.theme, sniff, rateWindow];
     untrack(build);
   });
 
   const hoveredWin = $derived(hovered === null ? null : wins[hovered]);
+
+  // colour key of the QC strip, drawn with the same rule as the bars (percentile on the worse side → tint)
+  const tint = (worseThan: number) => {
+    const mix = shadeMix(atypicality(100 - worseThan, "higher")) / 45;
+    return mix > 0 ? { color: "var(--atyp)", alpha: 0.35 + 0.65 * mix } : { color: "var(--surface-3)", alpha: 1 };
+  };
+  const KEY = [
+    { label: "grey: median or better", ...tint(50) },
+    { label: "light: worse than 75% of them", ...tint(75) },
+    { label: "strong: worse than 90%", ...tint(90) },
+    { label: "full: worse than 98%", ...tint(98) },
+  ];
 </script>
 
 <div class="stack">
   <div class="tools faint">
     <span>Drag to zoom · double-click to reset · click a window below to zoom to it</span>
     <span class="spacer"></span>
-    <label class="rw" title="0 = instantaneous rate of every inter-onset interval; otherwise a centred rolling mean over this many seconds">
+    <label
+      class="rw"
+      title="Empty = follows the zoom (a wide rolling mean zoomed out, each interval zoomed in). 0 = instantaneous rate of every inter-onset interval; otherwise a centred rolling mean over this many seconds."
+    >
       rate window
       <input
         type="number"
         min="0"
         step="1"
-        value={rateWindow}
+        value={rateWindow ?? ""}
+        placeholder={`auto ${effWindow}`}
         onchange={(e) => {
-          const v = Number(e.currentTarget.value);
-          app.setRateWindow(Number.isFinite(v) && v > 0 ? v : 0);
+          const raw = e.currentTarget.value.trim();
+          const v = Number(raw);
+          app.setRateWindow(raw === "" || !Number.isFinite(v) ? null : v);
         }}
         aria-label="Breathing rate window in seconds"
       />
       s
+      {#if rateWindow !== null}<button class="small" onclick={() => app.setRateWindow(null)}>auto</button>{/if}
     </label>
     {#if hoveredWin}
       <span class="mono hov">
@@ -368,15 +401,54 @@
     {/if}
     <button class="small" onclick={() => setRange([...full])}>Reset zoom</button>
   </div>
-  <div class="host" bind:this={host}></div>
-  <div class="legend faint">
-    <span><i class="sw" style:background="var(--trace)"></i> breathing (z-scored, inhale up) · ticks = inhales</span>
-    {#if sniff}<span><i class="sw" style:background="var(--sniff)"></i> sniff sensor (thermistor, resampled to the prediction's 60 Hz)</span>{/if}
-    <span>
-      <i class="sw" style:background="var(--rate)"></i> breathing rate = 1 / inter-onset interval{rateWindow > 0 ? `, ${rateWindow}-s rolling mean` : " (each interval)"}
-    </span>
-    <span><i class="sw" style:background="var(--onset)"></i> inhale probability · dashed = threshold {threshold}</span>
-    <span><i class="sw" style:background="var(--atyp)"></i> window tint = toward the worse side of the reference</span>
+  <div class="host" bind:this={host}>
+    <div class="cap">
+      <i class="sw" style:background="var(--trace)"></i>
+      <b>Predicted breathing</b> — the network's trace from the video, z-scored, inhale up. Ticks along the bottom: detected inhales.
+    </div>
+    <div bind:this={hosts.sig}></div>
+
+    {#if sniff}
+      <div class="cap">
+        <i class="sw" style:background="var(--sniff)"></i>
+        <b>Sniff sensor</b> — the implanted thermistor (sniffing.parquet, raw voltage), resampled from 250 Hz to the prediction's 60 Hz.
+        Aligned to the prediction at their first samples only.
+      </div>
+      <div bind:this={hosts.sniff}></div>
+    {/if}
+
+    <div class="cap">
+      <i class="sw" style:background="var(--rate)"></i>
+      <b>Breathing rate</b> — 1 / the time between consecutive detected inhales, in Hz.
+      {#if effWindow > 0}Smoothed: mean over a centred {effWindow}-s window.{:else}Unsmoothed: one step per inter-inhale interval.{/if}
+      {#if rateWindow === null}<span class="faint">The window follows the zoom (wider when zoomed out, none when zoomed in).</span>{/if}
+      Gaps over 2 s are left blank.
+    </div>
+    <div bind:this={hosts.rate}></div>
+
+    <div class="cap">
+      <i class="sw" style:background="var(--onset)"></i>
+      <b>Inhale probability</b> — the network's per-sample probability that an inhale starts; an inhale is detected where it peaks above the dashed
+      threshold ({threshold}).
+    </div>
+    <div bind:this={hosts.ons}></div>
+
+    <div class="cap">
+      <b>QC per 30-s window: {MEASURE_BY_NAME[measure].label}</b> — {MEASURE_BY_NAME[measure].help}
+      {#if MEASURE_BY_NAME[measure].better}
+        <span class="faint">({MEASURE_BY_NAME[measure].better} is better.)</span>
+        <div class="key">
+          Bar height = the window's value. Colour = how this window ranks among the network's validation windows on this measure:
+          {#each KEY as k (k.label)}
+            <span class="chip"><i class="swatch" style:background={k.color} style:opacity={k.alpha}></i>{k.label}</span>
+          {/each}
+          <span class="faint">A rank, not a verdict: compare with the reference panels below.</span>
+        </div>
+      {:else}
+        <span class="faint">Descriptive only (no better direction): bars are not coloured.</span>
+      {/if}
+    </div>
+    <div bind:this={hosts.strip}></div>
   </div>
 </div>
 
@@ -402,7 +474,7 @@
     gap: 4px;
   }
   .rw input {
-    width: 52px;
+    width: 76px;
     height: 24px;
     padding: 0 4px;
     border: 1px solid var(--border-strong);
@@ -415,17 +487,40 @@
   .host :global(.u-select) {
     background: color-mix(in oklab, var(--accent) 18%, transparent);
   }
-  .legend {
+  .cap {
+    font-size: 12px;
+    color: var(--text-2);
+    margin: 10px 0 2px 44px;
+    line-height: 1.45;
+  }
+  .cap b {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .key {
     display: flex;
     flex-wrap: wrap;
-    gap: 16px;
-    font-size: 11px;
+    align-items: center;
+    gap: 4px 12px;
+    margin-top: 3px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .swatch {
+    display: inline-block;
+    width: 18px;
+    height: 10px;
+    border-radius: 2px;
   }
   .sw {
     display: inline-block;
-    width: 10px;
+    width: 14px;
     height: 3px;
     border-radius: 2px;
     vertical-align: middle;
+    margin-right: 2px;
   }
 </style>

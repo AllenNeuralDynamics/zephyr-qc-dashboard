@@ -58,7 +58,7 @@
     if (!r?.raw || !p) return;
     let alive = true;
     sniff = { state: "loading" };
-    loadSniff(r.raw, r.c ?? "FaceCamera", p, { readSniff })
+    loadSniff(r.raw, p, { readSniff })
       .then((s) => alive && (sniff = s))
       .catch((e: Error) => alive && (sniff = { state: "failed", asset: "", error: e.message }));
     return () => {
@@ -103,9 +103,15 @@
           <span class="badge warn">sniff sensor could not be loaded</span> {sniff.error}
         {:else if sniff.state === "ready"}
           Sniff sensor from <a class="mono" href={sniff.url} download>{sniff.asset}/sniffing.parquet</a>
-          · aligned through the camera clock ({sniff.clock === "linear" ? "first/last frame" : "every frame"})
         {/if}
       </div>
+      {#if sniff?.state === "ready"}
+        <div class="notice warn-align">
+          <strong>Sniff sensor alignment is approximate.</strong> The prediction is in video time and the sensor on the Harp
+          clock, and neither file links the two: both are lined up at their first sample. Expect a constant offset (and slow
+          drift) between the sensor and the predicted trace; compare shapes and rates, not exact timing.
+        </div>
+      {/if}
       {#if error}
         <div class="notice error">{error}</div>
       {:else if !pred || !qc}
@@ -191,6 +197,11 @@
   .sniff {
     font-size: 12px;
     margin-bottom: 6px;
+  }
+  .warn-align {
+    font-size: 12px;
+    margin-bottom: 8px;
+    border-left: 3px solid var(--sniff);
   }
   .wrap {
     flex-wrap: wrap;

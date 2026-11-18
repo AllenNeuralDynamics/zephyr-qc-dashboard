@@ -1,5 +1,19 @@
 // Breathing rate from the inhalation onsets' inter-onset intervals.
 
+const STEPS = [0.5, 1, 2, 5, 10, 15, 30, 60];
+
+/**
+ * The rolling window that suits a visible span of `span` seconds: about a hundredth of it, floored
+ * to a round step so small zooms do not change it, 0 (each interval) below half a second — a
+ * few-breath view — and at most a minute.
+ */
+export function autoRateWindow(span: number): number {
+  const w = span / 100;
+  let out = 0;
+  for (const s of STEPS) if (s <= w) out = s;
+  return out;
+}
+
 export interface Rate {
   t: Float64Array;
   hz: Float64Array;

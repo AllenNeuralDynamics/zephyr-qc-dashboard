@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { breathingRate } from "./rate";
+import { autoRateWindow, breathingRate } from "./rate";
+
+describe("autoRateWindow", () => {
+  it("is instantaneous when zoomed in to a few breaths", () => {
+    expect(autoRateWindow(5)).toBe(0);
+    expect(autoRateWindow(20)).toBe(0);
+  });
+  it("grows with the visible span, on round steps", () => {
+    expect(autoRateWindow(60)).toBe(0.5);
+    expect(autoRateWindow(300)).toBe(2);
+    expect(autoRateWindow(600)).toBe(5);
+    expect(autoRateWindow(3000)).toBe(30);
+  });
+  it("caps at a minute", () => expect(autoRateWindow(1e6)).toBe(60));
+});
 
 const on = (...t: number[]) => Float64Array.from(t);
 

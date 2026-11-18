@@ -54,14 +54,18 @@ class AppState {
     return route.current.query.has("th") && Number.isFinite(v) ? v : 0.9;
   });
 
-  /** breathing-rate rolling window in seconds; 0 = instantaneous (each inter-onset interval) */
-  rateWindow: number = $derived.by(() => {
-    const v = Number(route.current.query.get("rw"));
-    return Number.isFinite(v) && v > 0 ? v : 0;
+  /**
+   * breathing-rate rolling window in seconds; 0 = instantaneous (each inter-onset interval);
+   * null (the default, no `rw` in the URL) = follow the visible span
+   */
+  rateWindow: number | null = $derived.by(() => {
+    const q = route.current.query;
+    const v = Number(q.get("rw"));
+    return q.has("rw") && Number.isFinite(v) && v >= 0 ? v : null;
   });
 
-  setRateWindow(s: number) {
-    replaceQuery({ rw: s > 0 ? String(s) : null });
+  setRateWindow(s: number | null) {
+    replaceQuery({ rw: s === null ? null : String(Math.max(0, s)) });
   }
 
   setFilters(f: Partial<Filters>) {

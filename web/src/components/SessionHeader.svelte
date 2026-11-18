@@ -4,6 +4,7 @@
   import { fileUrl, type IndexRow } from "../lib/index-types";
   import { href } from "../lib/router.svelte";
   import { bucketUrl, listPrefix, s3Location } from "../lib/s3";
+  import { NETWORKS_PREFIX } from "../lib/networks";
 
   let { row }: { row: IndexRow } = $props();
   let zoom = $state(false);
@@ -39,7 +40,19 @@
     return {
       uri,
       cli: `aws s3 cp --recursive --no-sign-request ${uri} .`,
-      console: `https://s3.console.aws.amazon.com/s3/buckets/${loc.bucket}?region=us-west-2&prefix=${encodeURIComponent(loc.prefix)}`,
+    };
+  });
+  // the AIND catalog browser: the Zephyr inference asset when the session came from DocDB; the
+  // manuscript's application/ folders are scratch, not catalog assets, so those link the raw session
+  const CATALOG = "https://allenneuraldynamics.github.io/catalog-browser/browse/";
+  const catalog = $derived.by(() => {
+    const scratch = row.b.includes(`/${NETWORKS_PREFIX}`);
+    const name = scratch ? row.raw : row.id.split("/")[0];
+    if (!name) return null;
+    return {
+      url: `${CATALOG}${encodeURIComponent(name)}/`,
+      label: scratch ? "Raw session in the data catalog" : "Open in the data catalog",
+      title: name,
     };
   });
   let copied = $state<string | null>(null);
@@ -77,7 +90,9 @@
       <code class="mono" title="S3 location of this session's Zephyr output">{s3.uri}</code>
       <button class="small" onclick={() => copy(s3.uri)}>{copied === s3.uri ? "Copied" : "Copy path"}</button>
       <button class="small" onclick={() => copy(s3.cli)} title={s3.cli}>{copied === s3.cli ? "Copied" : "Copy download command"}</button>
-      <a href={s3.console} target="_blank" rel="noreferrer">Open in AWS console ↗</a>
+      {#if catalog}
+        <a href={catalog.url} target="_blank" rel="noreferrer" title={catalog.title}>{catalog.label} ↗</a>
+      {/if}
     </div>
   {/if}
   <details class="files">
