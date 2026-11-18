@@ -87,8 +87,15 @@ class AppState {
     }
   }
 
+  /** Set the theme attribute right away, so components redrawing on `theme` read the new colors. */
+  applyTheme() {
+    if (this.theme === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", this.theme);
+  }
+
   cycleTheme() {
     this.theme = this.theme === "auto" ? "light" : this.theme === "light" ? "dark" : "auto";
+    this.applyTheme();
     try {
       localStorage.setItem(THEME_KEY, this.theme);
     } catch {
