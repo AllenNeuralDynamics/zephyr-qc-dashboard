@@ -7,6 +7,7 @@
   import FilterBar from "./components/FilterBar.svelte";
   import SessionTable from "./components/SessionTable.svelte";
   import SessionView from "./components/SessionView.svelte";
+  import HelpPanel from "./components/HelpPanel.svelte";
   import { filterRows } from "./lib/filter";
 
   const sessionId = $derived(sessionIdFromPath(route.current.path));
@@ -43,6 +44,7 @@
   </main>
 </div>
 <CommandPalette />
+<HelpPanel />
 
 <style>
   .shell {

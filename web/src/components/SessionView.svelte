@@ -2,10 +2,12 @@
   import { app } from "../lib/app.svelte";
   import { fileUrl, type IndexRow } from "../lib/index-types";
   import { MEASURES, type MeasureName } from "../lib/measures";
-  import { windowPercentiles, type QcReport, type Reference } from "../lib/qc";
+  import { splitReference, TRUTHS, windowPercentiles, type QcReport, type Reference, type TruthName } from "../lib/qc";
   import { loadPrediction, loadQc, loadReference, type Prediction } from "../lib/session";
   import SessionHeader from "./SessionHeader.svelte";
   import TraceStack from "./TraceStack.svelte";
+  import MeasureCompare from "./MeasureCompare.svelte";
+  import CalibrationPlot from "./CalibrationPlot.svelte";
 
   let { id }: { id: string } = $props();
   const row: IndexRow | undefined = $derived(app.byId.get(id));
@@ -47,6 +49,8 @@
   });
 
   const pcts = $derived(qc ? qc.windows.map((w) => windowPercentiles(w, ref)) : []);
+  const split = $derived(ref ? splitReference(ref, app.truth, app.threshold) : { good: [], poor: [] });
+  const truthBetter = $derived(TRUTHS.find((t) => t.name === app.truth)?.better ?? "higher");
 </script>
 
 {#if !row}
@@ -75,6 +79,56 @@
         <TraceStack {pred} windows={qc.windows} {pcts} measure={app.measure} threshold={qc.head_threshold} />
       {/if}
     </section>
+    {#if qc}
+      <section class="panel">
+        <div class="row ctl wrap">
+          <h2>Compared with the network's validation windows</h2>
+          <span class="spacer"></span>
+          {#if ref}
+            <label class="row">
+              <span class="faint">Split reference by</span>
+              <select value={app.truth} onchange={(e) => app.setSplit(e.currentTarget.value as TruthName, app.threshold)}>
+                {#each TRUTHS as t (t.name)}<option value={t.name}>{t.label}</option>{/each}
+              </select>
+              <span class="faint">{truthBetter === "higher" ? "≥" : "≤"}</span>
+              <input
+                class="th"
+                type="number"
+                step="0.05"
+                value={app.threshold}
+                onchange={(e) => {
+                  const v = Number(e.currentTarget.value);
+                  if (Number.isFinite(v)) app.setSplit(app.truth, v);
+                }}
+                aria-label="Threshold"
+              />
+            </label>
+          {/if}
+        </div>
+        {#if ref}
+          <div class="legend row faint">
+            <span><i class="sw" style:background="var(--series-good)"></i> reference windows predicted well ({split.good.length})</span>
+            <span><i class="sw" style:background="var(--series-poor)"></i> predicted poorly ({split.poor.length})</span>
+            <span><i class="sw" style:background="var(--series-session)"></i> this session's 30-s windows ({qc.windows.length}) · dashed = its median</span>
+          </div>
+        {:else if refState === "loading"}
+          <div class="faint">Loading the network's reference…</div>
+        {:else}
+          <div class="notice">
+            No reference for this network{refState === "failed" ? " (it could not be loaded)" : ""}: values are shown without
+            percentiles or validation windows.
+          </div>
+        {/if}
+        <div class="grid">
+          {#each MEASURES as m (m.name)}
+            <MeasureCompare measure={m} windows={qc.windows} {pcts} good={split.good} poor={split.poor} hasReference={!!ref} />
+          {/each}
+          {#if ref?.onset_calibration}
+            <CalibrationPlot cal={ref.onset_calibration} version={ref.zephyr_version} />
+          {/if}
+        </div>
+      </section>
+    {/if}
   </div>
 {/if}
 
@@ -90,5 +144,34 @@
   }
   .ctl {
     margin-bottom: 6px;
+  }
+  .wrap {
+    flex-wrap: wrap;
+  }
+  .th {
+    width: 70px;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .legend {
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 12px;
+    margin: 4px 0 10px;
+  }
+  .sw {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: -1px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 10px;
   }
 </style>

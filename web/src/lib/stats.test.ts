@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { finite, median, percentile } from "./stats";
+import { finite, median, percentile, spread } from "./stats";
 import { JUDGED, MEASURES } from "./measures";
 
 describe("median", () => {
@@ -16,6 +16,15 @@ describe("percentile (Zephyr's reference.percentiles)", () => {
   it("is null without reference values", () => expect(percentile(1, finite([]))).toBeNull());
   it("is 100 above everything", () => expect(percentile(10, finite([1, 2]))).toBe(100));
   it("is 0 below everything", () => expect(percentile(0, finite([1, 2]))).toBe(0));
+});
+
+describe("spread (Zephyr's box: middle half, 5–95 % whiskers)", () => {
+  it("gives linear-interpolated quantiles", () => {
+    const s = spread(Float64Array.from({ length: 101 }, (_, i) => i));
+    expect(s).toEqual({ p05: 5, p25: 25, p50: 50, p75: 75, p95: 95, n: 101 });
+  });
+  it("ignores missing values", () => expect(spread([3, null, NaN, 1, 2])?.p50).toBe(2));
+  it("is null with nothing known", () => expect(spread([null])).toBeNull());
 });
 
 describe("finite", () => {

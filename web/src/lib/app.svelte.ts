@@ -69,6 +69,10 @@ class AppState {
     replaceQuery({ m });
   }
 
+  setSplit(truth: TruthName, threshold: number) {
+    replaceQuery({ truth, th: String(threshold) });
+  }
+
   networkLabel(sha: string | null): string | null {
     return (sha && this.index?.networks[sha]?.label) || null;
   }

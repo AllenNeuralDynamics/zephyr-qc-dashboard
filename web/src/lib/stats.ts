@@ -36,3 +36,25 @@ export function percentile(value: Maybe, ref: Float64Array): number | null {
   }
   return (100 * below) / ref.length;
 }
+
+export interface Spread {
+  p05: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p95: number;
+  n: number;
+}
+
+/** Quantiles for a Zephyr-style box (middle half, 5–95 % whiskers, median); null when empty. */
+export function spread(xs: ArrayLike<Maybe>): Spread | null {
+  const v = finite(xs).sort();
+  if (!v.length) return null;
+  const q = (p: number) => {
+    const i = p * (v.length - 1);
+    const lo = Math.floor(i);
+    const hi = Math.ceil(i);
+    return v[lo] + (v[hi] - v[lo]) * (i - lo);
+  };
+  return { p05: q(0.05), p25: q(0.25), p50: q(0.5), p75: q(0.75), p95: q(0.95), n: v.length };
+}
