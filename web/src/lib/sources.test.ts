@@ -42,9 +42,9 @@ describe("metadataSource", () => {
   it("makes one session per Zephyr process of each asset", async () => {
     const f = fakeFetch((url) => {
       if (url.startsWith("https://api.allenneuraldynamics.org")) {
-        expect(JSON.parse(new URL(url).searchParams.get("filter")!)).toEqual({
-          "processing.data_processes.name": "Zephyr breathing prediction",
-        });
+        const filter = JSON.parse(new URL(url).searchParams.get("filter")!);
+        if (filter.name) return "[]"; // the raw-session lookup
+        expect(filter).toEqual({ "processing.data_processes.name": "Zephyr breathing prediction" });
         return JSON.stringify([records[0]]);
       }
       if (url.includes("list-type=2"))
@@ -60,6 +60,35 @@ describe("metadataSource", () => {
     expect(refs[0]).toMatchObject({
       id: "788731_2025-12-09_19-10-07_processed_2025-12-20_19-45-53/FaceCamera_a",
     });
+  });
+
+  it("takes the date from the raw session's record, never from the derived asset", async () => {
+    const derived = { ...records[0], acquisition: { ...records[0].acquisition, acquisition_start_time: "2030-01-01T00:00:00Z" } };
+    const raw = { name: "788731_2025-12-09_19-10-07", acquisition: { acquisition_start_time: "2025-12-09 19:10:07.997150+00:00" } };
+    const f = fakeFetch((url) => {
+      if (url.startsWith("https://api.allenneuraldynamics.org")) {
+        const filter = JSON.parse(new URL(url).searchParams.get("filter")!);
+        if (filter.name) {
+          expect(filter).toEqual({ name: { $in: ["788731_2025-12-09_19-10-07"] } });
+          return JSON.stringify([raw]);
+        }
+        return JSON.stringify([derived]);
+      }
+      return "<ListBucketResult></ListBucketResult>";
+    });
+    const refs = await metadataSource.list(f);
+    expect(refs[0].date).toBe("2025-12-09T19:10:07Z");
+  });
+
+  it("has no date when the raw session is not in DocDB", async () => {
+    const f = fakeFetch((url) =>
+      url.startsWith("https://api.allenneuraldynamics.org")
+        ? JSON.parse(new URL(url).searchParams.get("filter")!).name
+          ? "[]"
+          : JSON.stringify([records[0]])
+        : "<ListBucketResult></ListBucketResult>",
+    );
+    expect((await metadataSource.list(f))[0].date).toBeNull();
   });
 
   it("keeps going when an asset cannot be listed", async () => {

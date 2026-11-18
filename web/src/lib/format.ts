@@ -26,6 +26,33 @@ export function formatDate(iso: string | null | undefined): string {
   return m ? m[1] : DASH;
 }
 
+/**
+ * A UTC timestamp as the viewer's local time, `HH:MM <zone>`, plus the local day when it is not
+ * the UTC day (`19:30 PST, Dec 9`). `timeZone` defaults to the browser's.
+ */
+export function formatLocalTime(iso: string | null | undefined, timeZone?: string): string {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (Number.isNaN(t)) return DASH;
+  const d = new Date(t);
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZoneName: "short",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value]),
+  );
+  const time = `${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
+  const localDay = new Date(`${parts.month} ${parts.day}, ${parts.year} UTC`).toISOString().slice(0, 10);
+  return localDay === d.toISOString().slice(0, 10) ? time : `${time}, ${parts.month} ${parts.day}`;
+}
+
 /** Seconds as `h:mm:ss` or `m:ss`. */
 export function formatDuration(s: number | null | undefined): string {
   if (isMissing(s)) return DASH;

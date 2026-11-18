@@ -1,7 +1,7 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
   import { sortRows, type SortKey } from "../lib/filter";
-  import { formatDate, DASH } from "../lib/format";
+  import { formatDate, formatLocalTime, DASH } from "../lib/format";
   import type { IndexRow } from "../lib/index-types";
   import { MEASURE_BY_NAME, MEASURES } from "../lib/measures";
   import { navigate, sessionPath } from "../lib/router.svelte";
@@ -67,7 +67,7 @@
       {#if first > 0}<tr class="pad" style:height="{first * ROW_H}px"><td colspan="99"></td></tr>{/if}
       {#each visible as r (r.id)}
         <tr class="clickable" onclick={() => open(r)} onkeydown={(e) => e.key === "Enter" && open(r)} tabindex="0">
-          <td class="mono">{formatDate(r.t)}</td>
+          <td class="mono" title={r.t ? `${r.t.slice(11, 16)} UTC · ${formatLocalTime(r.t)} local` : undefined}>{formatDate(r.t)}</td>
           <td class="mono">{r.s ?? DASH}</td>
           <td class="mono">{r.r ?? DASH}</td>
           <td class="ellipsis" title={r.e.join(", ")}>{r.e.length ? r.e.join(", ") : DASH}</td>

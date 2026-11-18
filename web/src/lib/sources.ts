@@ -1,7 +1,7 @@
 // Where sessions come from: the metadata service (published capsule results) or, until those
 // exist, the manuscript's application/ folder (real capsule-format outputs) with metadata from
 // the raw sessions' DocDB records.
-import { assetMeta, PROCESS_NAME, queryDocDb, zephyrProcesses, type AssetMeta } from "./docdb";
+import { assetMeta, PROCESS_NAME, queryDocDb, zephyrProcesses, type AssetMeta, type DocDbRecord } from "./docdb";
 import type { SessionRef } from "./index-types";
 import { NETWORKS_BUCKET, NETWORKS_PREFIX } from "./networks";
 import { bucketUrl, httpsUrl, listPrefix, type Fetch } from "./s3";
@@ -28,13 +28,24 @@ async function stemsInAsset(location: string, f: Fetch): Promise<string[]> {
   return [...new Set(stems)];
 }
 
+/** DocDB records of the named assets, `chunk` names per query (keeps the GET URL short). */
+async function recordsByName(names: string[], f: Fetch, chunk = 100): Promise<DocDbRecord[]> {
+  const out: DocDbRecord[] = [];
+  for (let i = 0; i < names.length; i += chunk) out.push(...(await queryDocDb({ name: { $in: names.slice(i, i + chunk) } }, f)));
+  return out;
+}
+
 export const metadataSource: Source = {
   name: "metadata",
   async list(f: Fetch = fetch) {
     const docs = await queryDocDb({ "processing.data_processes.name": PROCESS_NAME }, f);
+    // the session date is always the raw asset's acquisition start, from its own record
+    const raws = [...new Set(docs.map((d) => assetMeta(d).rawSession).filter((s): s is string => !!s))];
+    const rawDate = new Map((await recordsByName(raws, f)).map((d) => [String(d.name), assetMeta(d).date]));
     const out: SessionRef[] = [];
     for (const doc of docs) {
-      const meta = assetMeta(doc);
+      const derived = assetMeta(doc);
+      const meta = { ...derived, date: (derived.rawSession && rawDate.get(derived.rawSession)) ?? null };
       const procs = zephyrProcesses(doc);
       const named = procs.map((p) => (p.qcJson?.endsWith(QC) ? p.qcJson.slice(0, -QC.length) : null));
       let spare: string[] = [];
@@ -70,7 +81,7 @@ export const applicationSource: Source = {
       return { name, raw: name.slice(0, cut), camera: name.slice(cut + 1) };
     });
     const raws = [...new Set(split.map((s) => s.raw))];
-    const docs = raws.length ? await queryDocDb({ name: { $in: raws } }, f) : [];
+    const docs = await recordsByName(raws, f);
     const byName = new Map(docs.map((d) => [String(d.name), assetMeta(d)]));
     return split.map(({ name, raw, camera }): SessionRef => {
       const meta: AssetMeta = byName.get(raw) ?? {

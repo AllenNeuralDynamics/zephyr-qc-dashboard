@@ -1,6 +1,6 @@
 <script lang="ts">
   import { app } from "../lib/app.svelte";
-  import { DASH, formatDate, formatDuration } from "../lib/format";
+  import { DASH, formatDate, formatDuration, formatLocalTime } from "../lib/format";
   import { fileUrl, type IndexRow } from "../lib/index-types";
   import { href } from "../lib/router.svelte";
   import { bucketUrl, listPrefix, s3Location } from "../lib/s3";
@@ -68,7 +68,10 @@
   </div>
   <dl class="facts">
     <div><dt>Animal</dt><dd class="mono">{row.s ?? DASH}</dd></div>
-    <div><dt>Date</dt><dd class="mono">{formatDate(row.t)} <span class="faint">{time}</span></dd></div>
+    <div>
+      <dt>Date (raw session)</dt>
+      <dd class="mono">{formatDate(row.t)} <span class="faint">{time}</span>{#if row.t}<span class="local"> · {formatLocalTime(row.t)} local</span>{/if}</dd>
+    </div>
     <div><dt>Rig</dt><dd class="mono">{row.r ?? DASH}</dd></div>
     <div><dt>Experimenter</dt><dd>{row.e.length ? row.e.join(", ") : DASH}</dd></div>
     <div><dt>Duration</dt><dd class="mono">{formatDuration(row.d)}</dd></div>
@@ -154,6 +157,9 @@
   dt {
     font-size: 11px;
     color: var(--text-3);
+  }
+  .local {
+    color: var(--text-2);
   }
   dd {
     margin: 0;
