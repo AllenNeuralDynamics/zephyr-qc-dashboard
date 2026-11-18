@@ -54,6 +54,16 @@ class AppState {
     return route.current.query.has("th") && Number.isFinite(v) ? v : 0.9;
   });
 
+  /** breathing-rate rolling window in seconds; 0 = instantaneous (each inter-onset interval) */
+  rateWindow: number = $derived.by(() => {
+    const v = Number(route.current.query.get("rw"));
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  });
+
+  setRateWindow(s: number) {
+    replaceQuery({ rw: s > 0 ? String(s) : null });
+  }
+
   setFilters(f: Partial<Filters>) {
     const next = { ...this.filters, ...f };
     replaceQuery({

@@ -31,6 +31,24 @@
       alive = false;
     };
   });
+  // where the inference results live, for downloading the whole folder
+  const s3 = $derived.by(() => {
+    const loc = s3Location(row.b);
+    if (!loc) return null;
+    const uri = `s3://${loc.bucket}/${loc.prefix}`;
+    return {
+      uri,
+      cli: `aws s3 cp --recursive --no-sign-request ${uri} .`,
+      console: `https://s3.console.aws.amazon.com/s3/buckets/${loc.bucket}?region=us-west-2&prefix=${encodeURIComponent(loc.prefix)}`,
+    };
+  });
+  let copied = $state<string | null>(null);
+  function copy(text: string) {
+    navigator.clipboard?.writeText(text).then(() => {
+      copied = text;
+      setTimeout(() => copied === text && (copied = null), 1500);
+    });
+  }
   const kb = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 </script>
 
@@ -53,6 +71,15 @@
       </dd>
     </div>
   </dl>
+  {#if s3}
+    <div class="s3 row">
+      <span class="faint">Inference results</span>
+      <code class="mono" title="S3 location of this session's Zephyr output">{s3.uri}</code>
+      <button class="small" onclick={() => copy(s3.uri)}>{copied === s3.uri ? "Copied" : "Copy path"}</button>
+      <button class="small" onclick={() => copy(s3.cli)} title={s3.cli}>{copied === s3.cli ? "Copied" : "Copy download command"}</button>
+      <a href={s3.console} target="_blank" rel="noreferrer">Open in AWS console ↗</a>
+    </div>
+  {/if}
   <details class="files">
     <summary class="faint">Files in this asset{files ? ` (${files.length})` : ""}</summary>
     {#if filesError}
@@ -124,6 +151,18 @@
   .notice {
     grid-column: 1;
   }
+  .s3 {
+    grid-column: 1;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    font-size: 12px;
+  }
+  .s3 code {
+    padding: 2px 6px;
+    border-radius: var(--radius);
+    background: var(--surface-2);
+    overflow-wrap: anywhere;
+  }
   .files {
     grid-column: 1;
     font-size: 12px;
@@ -138,7 +177,7 @@
   }
   .thumb {
     grid-column: 2;
-    grid-row: 1 / span 3;
+    grid-row: 1 / span 4;
     height: auto;
     padding: 2px;
   }

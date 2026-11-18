@@ -13,6 +13,8 @@
   import type { QcWindow, Values } from "../lib/qc";
   import type { Prediction } from "../lib/session";
   import { atypicality, shadeMix } from "../lib/shade";
+  import { breathingRate } from "../lib/rate";
+  import { extentTicks } from "../lib/ticks";
 
   let {
     pred,
@@ -20,7 +22,19 @@
     pcts,
     measure,
     threshold,
-  }: { pred: Prediction; windows: QcWindow[]; pcts: Values[]; measure: MeasureName; threshold: number } = $props();
+    sniff = null,
+    rateWindow = 0,
+  }: {
+    pred: Prediction;
+    windows: QcWindow[];
+    pcts: Values[];
+    measure: MeasureName;
+    threshold: number;
+    /** sniff sensor on the prediction's samples (null: none or not loaded yet) */
+    sniff?: Float32Array | null;
+    /** breathing-rate rolling window, s (0 = instantaneous) */
+    rateWindow?: number;
+  } = $props();
 
   let host = $state<HTMLDivElement | null>(null);
   let width = $state(800);
@@ -34,6 +48,7 @@
   const inhales = $derived(Float64Array.from(pred.inhaleTimes, (t) => t - t0));
   const wins = $derived(windows.map((w, i) => ({ start: w.start - t0, end: w.end - t0, value: w[measure] ?? null, pct: pcts[i]?.[measure] ?? null })));
   const full = $derived<[number, number]>([0, rel.length ? rel[rel.length - 1] : 1]);
+  const rate = $derived(breathingRate(inhales, rateWindow));
 
   // resolve a CSS custom property to a concrete color (canvas cannot use `var(--x)` strings)
   function css(name: string): string {
@@ -56,17 +71,21 @@
     };
   }
 
-  function data(series: ArrayLike<number>): uPlot.AlignedData {
-    const [i0, i1] = visibleRange(rel, range[0], range[1]);
-    const d = decimate(rel, series, i0, i1, Math.max(200, Math.round(width)));
-    return [Array.from(d.x), Array.from(d.y)];
+  const gap = (v: number) => (Number.isFinite(v) ? v : null);
+
+  function data(series: ArrayLike<number>, x: Float64Array = rel): uPlot.AlignedData {
+    const [i0, i1] = visibleRange(x, range[0], range[1]);
+    const d = decimate(x, series, i0, i1, Math.max(200, Math.round(width)));
+    return [Array.from(d.x), Array.from(d.y, gap)] as uPlot.AlignedData;
   }
+
+  // charts whose data is re-decimated to the visible range on every zoom
+  let refreshers: (() => void)[] = [];
 
   function setRange(next: [number, number]) {
     const span = Math.max(next[1] - next[0], 0.5);
     range = [next[0], next[0] + span];
-    charts[0]?.setData(data(pred.signal), false);
-    charts[1]?.setData(data(pred.onset), false);
+    for (const r of refreshers) r();
     for (const u of charts) u.setScale("x", { min: range[0], max: range[1] });
   }
 
@@ -140,6 +159,48 @@
       data(pred.signal),
       host,
     );
+    const made: uPlot[] = [sig];
+    refreshers = [() => sig.setData(data(pred.signal), false)];
+
+    if (sniff) {
+      const values = sniff;
+      const sn = new uPlot(
+        {
+          ...common(110),
+          axes: [timeAxis(false), axis("sniff sensor")],
+          series: [{}, { stroke: css("--sniff"), width: 1, points: { show: false } }],
+        },
+        data(values),
+        host,
+      );
+      made.push(sn);
+      refreshers.push(() => sn.setData(data(values), false));
+    }
+
+    // breathing rate from the inter-onset intervals: steps (window 0) or a rolling mean
+    const top = (() => {
+      const v = Array.from(rate.hz).filter(Number.isFinite).sort((a, b) => a - b);
+      return v.length ? v[Math.min(v.length - 1, Math.floor(v.length * 0.995))] * 1.15 : 1;
+    })();
+    const rt = new uPlot(
+      {
+        ...common(100),
+        axes: [timeAxis(false), axis("rate (Hz)", { values: (_u, t) => t.map((v) => formatValue(v, 2)) })],
+        scales: { ...common(0).scales, y: { auto: false, range: [0, top] } },
+        series: [
+          {},
+          {
+            stroke: css("--rate"),
+            width: 1.25,
+            points: { show: false },
+            paths: rateWindow > 0 ? undefined : uPlot.paths.stepped!({ align: 1 }),
+          },
+        ],
+      },
+      [Array.from(rate.t), Array.from(rate.hz, gap)] as uPlot.AlignedData,
+      host,
+    );
+    made.push(rt);
 
     const ons = new uPlot(
       {
@@ -172,14 +233,23 @@
       data(pred.onset),
       host,
     );
+    made.push(ons);
+    refreshers.push(() => ons.setData(data(pred.onset), false));
 
     const atyp = css("--atyp");
     const surface = css("--surface-3");
     const better = MEASURE_BY_NAME[measure].better;
     const strip = new uPlot(
       {
-        ...common(90),
-        axes: [timeAxis(true), axis(MEASURE_BY_NAME[measure].short, { values: (_u, t) => t.map((v) => formatValue(v, 2)) })],
+        ...common(100),
+        axes: [
+          timeAxis(true),
+          // label the windows' min and max (auto ticks can miss a narrow padded range)
+          axis(MEASURE_BY_NAME[measure].short, {
+            splits: () => extentTicks(wins.map((w) => w.value)),
+            values: (_u, t) => t.map((v) => formatValue(v, 2)),
+          }),
+        ],
         series: [{}, { stroke: "transparent", points: { show: false } }],
         hooks: {
           ...common(0).hooks,
@@ -242,11 +312,8 @@
     strip.over.addEventListener("click", () => {
       if (hovered !== null && strip.select.width < 3) setRange([wins[hovered].start, wins[hovered].end]);
     });
-    charts = [sig, ons, strip];
+    charts = [...made, strip];
     for (const u of charts) u.over.addEventListener("dblclick", () => setRange([...full]));
-    sync.sub(sig);
-    sync.sub(ons);
-    sync.sub(strip);
   }
 
   onMount(() => {
@@ -267,7 +334,7 @@
 
   // rebuild when the data, the measure, the threshold or the theme change
   $effect(() => {
-    void [pred, wins, threshold, app.theme];
+    void [pred, wins, threshold, app.theme, sniff, rate];
     untrack(build);
   });
 
@@ -278,6 +345,21 @@
   <div class="tools faint">
     <span>Drag to zoom · double-click to reset · click a window below to zoom to it</span>
     <span class="spacer"></span>
+    <label class="rw" title="0 = instantaneous rate of every inter-onset interval; otherwise a centred rolling mean over this many seconds">
+      rate window
+      <input
+        type="number"
+        min="0"
+        step="1"
+        value={rateWindow}
+        onchange={(e) => {
+          const v = Number(e.currentTarget.value);
+          app.setRateWindow(Number.isFinite(v) && v > 0 ? v : 0);
+        }}
+        aria-label="Breathing rate window in seconds"
+      />
+      s
+    </label>
     {#if hoveredWin}
       <span class="mono hov">
         {formatDuration(hoveredWin.start)}–{formatDuration(hoveredWin.end)} · {MEASURE_BY_NAME[measure].short}
@@ -289,6 +371,10 @@
   <div class="host" bind:this={host}></div>
   <div class="legend faint">
     <span><i class="sw" style:background="var(--trace)"></i> breathing (z-scored, inhale up) · ticks = inhales</span>
+    {#if sniff}<span><i class="sw" style:background="var(--sniff)"></i> sniff sensor (thermistor, resampled to the prediction's 60 Hz)</span>{/if}
+    <span>
+      <i class="sw" style:background="var(--rate)"></i> breathing rate = 1 / inter-onset interval{rateWindow > 0 ? `, ${rateWindow}-s rolling mean` : " (each interval)"}
+    </span>
     <span><i class="sw" style:background="var(--onset)"></i> inhale probability · dashed = threshold {threshold}</span>
     <span><i class="sw" style:background="var(--atyp)"></i> window tint = toward the worse side of the reference</span>
   </div>
@@ -309,6 +395,19 @@
   }
   .hov {
     color: var(--text);
+  }
+  .rw {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .rw input {
+    width: 52px;
+    height: 24px;
+    padding: 0 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--surface);
   }
   .host {
     width: 100%;

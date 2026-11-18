@@ -20,5 +20,6 @@ describe("parsePrediction", () => {
     expect(p.signal[4]).toBeCloseTo(2);
     expect(p.onset[9]).toBeCloseTo(0.9);
     expect(Array.from(p.inhaleTimes)).toEqual([time[2], time[7]]);
+    expect(p.frame[9]).toBe(9);
   });
 });

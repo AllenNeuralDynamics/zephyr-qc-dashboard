@@ -3,7 +3,8 @@
   import { fileUrl, type IndexRow } from "../lib/index-types";
   import { MEASURES, type MeasureName } from "../lib/measures";
   import { splitReference, TRUTHS, windowPercentiles, type QcReport, type Reference, type TruthName } from "../lib/qc";
-  import { loadPrediction, loadQc, loadReference, type Prediction } from "../lib/session";
+  import { loadPrediction, loadQc, loadReference, readSniff, type Prediction } from "../lib/session";
+  import { loadSniff, type Sniff } from "../lib/behavior";
   import SessionHeader from "./SessionHeader.svelte";
   import TraceStack from "./TraceStack.svelte";
   import MeasureCompare from "./MeasureCompare.svelte";
@@ -48,6 +49,24 @@
     };
   });
 
+  // the sniff sensor, looked up lazily once the prediction (its frame clock) is here
+  let sniff = $state<Sniff | { state: "loading" } | null>(null);
+  $effect(() => {
+    const r = row;
+    const p = pred;
+    sniff = null;
+    if (!r?.raw || !p) return;
+    let alive = true;
+    sniff = { state: "loading" };
+    loadSniff(r.raw, r.c ?? "FaceCamera", p, { readSniff })
+      .then((s) => alive && (sniff = s))
+      .catch((e: Error) => alive && (sniff = { state: "failed", asset: "", error: e.message }));
+    return () => {
+      alive = false;
+    };
+  });
+  const sniffValues = $derived(sniff?.state === "ready" ? sniff.values : null);
+
   const pcts = $derived(qc ? qc.windows.map((w) => windowPercentiles(w, ref)) : []);
   const split = $derived(ref ? splitReference(ref, app.truth, app.threshold) : { good: [], poor: [] });
   const truthBetter = $derived(TRUTHS.find((t) => t.name === app.truth)?.better ?? "higher");
@@ -71,12 +90,36 @@
         {#if refState === "loading"}<span class="faint">loading reference…</span>{/if}
         {#if refState === "failed"}<span class="badge warn">reference could not be loaded</span>{/if}
       </div>
+      <div class="sniff faint">
+        {#if !row.raw}
+          No raw session id: cannot look for a sniff sensor.
+        {:else if !sniff || sniff.state === "loading"}
+          Looking for a sniff sensor in the processed behavior asset…
+        {:else if sniff.state === "no-asset"}
+          No processed behavior asset in DocDB for this session.
+        {:else if sniff.state === "no-sensor"}
+          No sniff sensor in <span class="mono">{sniff.asset}</span> (animal not implanted).
+        {:else if sniff.state === "failed"}
+          <span class="badge warn">sniff sensor could not be loaded</span> {sniff.error}
+        {:else if sniff.state === "ready"}
+          Sniff sensor from <a class="mono" href={sniff.url} download>{sniff.asset}/sniffing.parquet</a>
+          · aligned through the camera clock ({sniff.clock === "linear" ? "first/last frame" : "every frame"})
+        {/if}
+      </div>
       {#if error}
         <div class="notice error">{error}</div>
       {:else if !pred || !qc}
         <div class="empty">Loading trace…</div>
       {:else}
-        <TraceStack {pred} windows={qc.windows} {pcts} measure={app.measure} threshold={qc.head_threshold} />
+        <TraceStack
+          {pred}
+          windows={qc.windows}
+          {pcts}
+          measure={app.measure}
+          threshold={qc.head_threshold}
+          sniff={sniffValues}
+          rateWindow={app.rateWindow}
+        />
       {/if}
     </section>
     {#if qc}
@@ -143,6 +186,10 @@
     border-bottom: 1px solid var(--border);
   }
   .ctl {
+    margin-bottom: 6px;
+  }
+  .sniff {
+    font-size: 12px;
     margin-bottom: 6px;
   }
   .wrap {

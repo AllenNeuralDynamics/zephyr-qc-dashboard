@@ -23,13 +23,18 @@ export const PROJECTION = {
 export type DocDbRecord = Record<string, any>;
 
 /** All records matching `filter`, paged by `_id`; halves the page when the gateway says 413. */
-export async function queryDocDb(filter: object, f: Fetch = fetch, pageSize = 500): Promise<DocDbRecord[]> {
+export async function queryDocDb(
+  filter: object,
+  f: Fetch = fetch,
+  pageSize = 500,
+  projection: object = PROJECTION,
+): Promise<DocDbRecord[]> {
   const out: DocDbRecord[] = [];
   let size = pageSize;
   for (;;) {
     const q = new URLSearchParams({
       filter: JSON.stringify(filter),
-      projection: JSON.stringify(PROJECTION),
+      projection: JSON.stringify(projection),
       sort: JSON.stringify({ _id: 1 }),
       limit: String(size),
       skip: String(out.length),

@@ -7,12 +7,13 @@ export interface FakeFetch {
   headers: Record<string, string>[];
 }
 
-export function fakeFetch(answer: (url: string) => Answer): FakeFetch {
+export function fakeFetch(answer: (url: string, headers: Record<string, string>) => Answer): FakeFetch {
   const f = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    const headers = Object.fromEntries(new Headers(init?.headers).entries()) as Record<string, string>;
     f.calls.push(url);
-    f.headers.push(Object.fromEntries(new Headers(init?.headers).entries()) as Record<string, string>);
-    const a = answer(url);
+    f.headers.push(headers);
+    const a = answer(url, headers);
     const { status, body } = typeof a === "string" ? { status: 200, body: a } : a;
     return new Response(body, { status });
   }) as FakeFetch;
