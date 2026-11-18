@@ -42,18 +42,13 @@
       cli: `aws s3 cp --recursive --no-sign-request ${uri} .`,
     };
   });
-  // the AIND catalog browser: the Zephyr inference asset when the session came from DocDB; the
-  // manuscript's application/ folders are scratch, not catalog assets, so those link the raw session
+  // the Zephyr inference asset in the AIND catalog browser. The manuscript's application/ folders
+  // are scratch, not catalog assets: they have no link (copy the path instead)
   const CATALOG = "https://allenneuraldynamics.github.io/catalog-browser/browse/";
   const catalog = $derived.by(() => {
-    const scratch = row.b.includes(`/${NETWORKS_PREFIX}`);
-    const name = scratch ? row.raw : row.id.split("/")[0];
-    if (!name) return null;
-    return {
-      url: `${CATALOG}${encodeURIComponent(name)}/`,
-      label: scratch ? "Raw session in the data catalog" : "Open in the data catalog",
-      title: name,
-    };
+    if (row.b.includes(`/${NETWORKS_PREFIX}`)) return null;
+    const name = row.id.split("/")[0];
+    return name ? { url: `${CATALOG}${encodeURIComponent(name)}/`, title: name } : null;
   });
   let copied = $state<string | null>(null);
   function copy(text: string) {
@@ -91,7 +86,7 @@
       <button class="small" onclick={() => copy(s3.uri)}>{copied === s3.uri ? "Copied" : "Copy path"}</button>
       <button class="small" onclick={() => copy(s3.cli)} title={s3.cli}>{copied === s3.cli ? "Copied" : "Copy download command"}</button>
       {#if catalog}
-        <a href={catalog.url} target="_blank" rel="noreferrer" title={catalog.title}>{catalog.label} ↗</a>
+        <a href={catalog.url} target="_blank" rel="noreferrer" title={catalog.title}>See in S3 ↗</a>
       {/if}
     </div>
   {/if}
